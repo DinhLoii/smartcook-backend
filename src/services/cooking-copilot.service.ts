@@ -31,6 +31,10 @@ const local = (speechReply: string): CookingCopilotResponse => ({ action: "NONE"
 function fallback(reason: string, status?: number): CookingCopilotResponse {
   // Deliberately omit credentials, raw provider errors, transcripts and recipe content.
   console.warn("[CookingCopilot] Advice unavailable", { reason, model: GEMINI_MODEL, status });
+  if (status === 429) return {
+    ...unavailable,
+    speechReply: "Dịch vụ AI đang hết hạn mức nên chưa trả lời được câu hỏi này. Bạn vẫn có thể dùng đọc hướng dẫn, chuyển bước và hẹn giờ. Hãy thử hỏi AI lại khi hạn mức được khôi phục.",
+  };
   return unavailable;
 }
 
