@@ -146,6 +146,13 @@ async function main() {
     const beforeFailure = generation.mock.callCount();
     await aiService.cookingVoiceCopilot("provider-failure", question);
     assert.equal(generation.mock.callCount(), beforeFailure + 1, "Provider failure must not fan out to multiple models");
+    generation.mock.mockImplementation(async () => { throw Object.assign(new Error("quota"), { status: 429 }); });
+    const quotaReply = await aiService.cookingVoiceCopilot("quota-failure", question);
+    assert.match(quotaReply.speechReply, /hết hạn mức/);
+    const beforeLocal = generation.mock.callCount();
+    const repeatDuringQuota = await aiService.cookingVoiceCopilot("quota-failure", { ...question, userVoiceText: "Đọc lại" });
+    assert.equal(repeatDuringQuota.action, "REPEAT_STEP");
+    assert.equal(generation.mock.callCount(), beforeLocal, "Step guidance still works during provider quota exhaustion");
 
     const phoQuestion = {
       ...base, recipeTitle: "Phở Bò Tái Lăn Hà Nội",

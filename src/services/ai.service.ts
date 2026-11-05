@@ -15,7 +15,7 @@ export interface ScanIngredientResult {
   imageUrl: string;
   image: string; // Mobile compatibility
   accuracy: number;
-  dishes?: { name: string; confidence: string }[];
+  dishes?: { name: string; confidence: string; icon?: string }[];
   ingredients: IScanDetectedIngredient[];
   pins: IScanPin[];
   suggestedRecipe: IScanSuggestedRecipe;

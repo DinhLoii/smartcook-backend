@@ -5,10 +5,14 @@ export interface IScanDetectedIngredient {
   confidence: string; // e.g. "98%"
   icon: string;       // e.g. "food-drumstick", "fruit-cherries", "leaf"
   source?: "visible" | "inferred";
+  dishNames?: string[];
+  evidence?: string;
 }
 
 export interface IScanPin {
   text: string;
+  icon?: string;
+  confidence?: string;
   top?: number;
   bottom?: number;
   left?: number;
@@ -30,7 +34,7 @@ export interface IScanHistory extends Document {
   imageUrl: string;
   imagePublicId?: string;
   accuracy: number;
-  dishes?: { name: string; confidence: string }[];
+  dishes?: { name: string; confidence: string; icon?: string }[];
   ingredients: IScanDetectedIngredient[];
   pins: IScanPin[];
   suggestedRecipe: IScanSuggestedRecipe;
@@ -45,6 +49,8 @@ const ScanDetectedIngredientSchema = new Schema<IScanDetectedIngredient>(
     confidence: { type: String, required: true, default: "95%" },
     icon: { type: String, required: true, default: "food-apple" },
     source: { type: String, enum: ["visible", "inferred"] },
+    dishNames: { type: [String], default: [] },
+    evidence: { type: String, trim: true },
   },
   { _id: false }
 );
@@ -52,6 +58,8 @@ const ScanDetectedIngredientSchema = new Schema<IScanDetectedIngredient>(
 const ScanPinSchema = new Schema<IScanPin>(
   {
     text: { type: String, required: true },
+    icon: { type: String },
+    confidence: { type: String },
     top: { type: Number },
     bottom: { type: Number },
     left: { type: Number },
@@ -105,7 +113,7 @@ const ScanHistorySchema = new Schema<IScanHistory>(
       default: [],
     },
     dishes: {
-      type: [new Schema({ name: { type: String, required: true }, confidence: { type: String, required: true } }, { _id: false })],
+      type: [new Schema({ name: { type: String, required: true }, confidence: { type: String, required: true }, icon: { type: String } }, { _id: false })],
       default: [],
     },
     pins: {

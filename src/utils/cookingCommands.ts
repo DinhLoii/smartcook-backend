@@ -100,10 +100,18 @@ export function parseCookingCommand(input: string): CookingCommand | null {
   return null;
 }
 
+function formatStepSpeech(stepNumber: number, title: string, description?: string): string {
+  const cleanTitle = title?.trim() || "";
+  const prefix = /^bước\s+\d+/i.test(cleanTitle) ? cleanTitle : `Bước ${stepNumber}: ${cleanTitle}`;
+  const desc = description?.trim() || "";
+  if (!desc || desc === cleanTitle) return prefix;
+  return `${prefix}. ${desc}`;
+}
+
 /** Resolve real step numbers instead of treating a spoken number as an array index. */
 export function resolveCookingCommand(input: string, context: {
   currentStep: { stepNumber: number; title: string; description: string };
-  recipeContext?: { steps: { stepNumber: number; title: string }[] };
+  recipeContext?: { steps: { stepNumber: number; title: string; description?: string }[] };
 }): CookingCommand | null {
   const command = parseCookingCommand(input);
   if (!command) return null;
@@ -111,18 +119,40 @@ export function resolveCookingCommand(input: string, context: {
   const steps = context.recipeContext?.steps;
   if (command.action === "GO_TO_STEP") {
     const target = command.actionPayload?.targetStep;
+    if (typeof target !== "number") return unchanged("Số bước không hợp lệ. Bạn muốn chuyển tới bước số mấy?");
     if (!steps?.length) return unchanged("Mình chưa có danh sách bước của món này. Bạn hãy chọn bước trên màn hình nhé.");
-    if (!steps.some((step) => step.stepNumber === target)) return unchanged(`Món này không có bước ${target}. Bạn hãy chọn một bước trên màn hình nhé.`);
+    const targetStepObj = steps.find((step) => step.stepNumber === target);
+    if (!targetStepObj) return unchanged(`Món này không có bước ${target}. Bạn hãy chọn một bước trên màn hình nhé.`);
     if (target === context.currentStep.stepNumber) return unchanged(`Bạn đang ở bước ${target} rồi nhé.`);
+    const stepSpeech = formatStepSpeech(target, targetStepObj.title, targetStepObj.description);
+    return { ...command, speechReply: `Mình chuyển sang bước ${target} nhé. ${stepSpeech}` };
   }
   const currentIndex = steps?.findIndex((step) => step.stepNumber === context.currentStep.stepNumber) ?? -1;
-  if (command.action === "PREV_STEP" && (currentIndex === 0 || (!steps?.length && context.currentStep.stepNumber <= 1))) {
-    return unchanged("Bạn đang ở bước đầu tiên rồi nhé.");
+  if (command.action === "PREV_STEP") {
+    if (currentIndex === 0 || (!steps?.length && context.currentStep.stepNumber <= 1)) {
+      return unchanged("Bạn đang ở bước đầu tiên rồi nhé.");
+    }
+    const prevStep = steps
+      ? (currentIndex > 0 ? steps[currentIndex - 1] : steps.find((s) => s.stepNumber === context.currentStep.stepNumber - 1))
+      : undefined;
+    if (prevStep) {
+      const stepSpeech = formatStepSpeech(prevStep.stepNumber, prevStep.title, prevStep.description);
+      return { ...command, speechReply: `Mình đã quay lại bước ${prevStep.stepNumber} nhé. ${stepSpeech}` };
+    }
   }
-  if (command.action === "NEXT_STEP" && steps?.length && currentIndex === steps.length - 1) {
-    return unchanged("Bạn đang ở bước cuối. Hãy bấm Hoàn thành trên màn hình khi món đã sẵn sàng nhé.");
+  if (command.action === "NEXT_STEP") {
+    if (steps?.length && currentIndex === steps.length - 1) {
+      return unchanged("Bạn đang ở bước cuối. Hãy bấm Hoàn thành trên màn hình khi món đã sẵn sàng nhé.");
+    }
+    const nextStep = steps
+      ? (currentIndex >= 0 && currentIndex < steps.length - 1 ? steps[currentIndex + 1] : steps.find((s) => s.stepNumber === context.currentStep.stepNumber + 1))
+      : undefined;
+    if (nextStep) {
+      const stepSpeech = formatStepSpeech(nextStep.stepNumber, nextStep.title, nextStep.description);
+      return { ...command, speechReply: `Mình chuyển sang bước ${nextStep.stepNumber} nhé. ${stepSpeech}` };
+    }
   }
   if (command.action === "REPEAT_STEP") return { ...command,
-    speechReply: `Bước ${context.currentStep.stepNumber}: ${context.currentStep.title}. ${context.currentStep.description}` };
+    speechReply: formatStepSpeech(context.currentStep.stepNumber, context.currentStep.title, context.currentStep.description) };
   return command;
 }
