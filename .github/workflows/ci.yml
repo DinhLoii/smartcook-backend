@@ -1,4 +1,4 @@
-name: SmartCook Backend CI / CD Pipeline
+name: SmartCook Backend CI
 
 on:
   push:
@@ -11,21 +11,18 @@ on:
       - develop
 
 jobs:
-  # ==========================================
-  # Job 1: Code Quality, Lint & TypeScript Build
-  # ==========================================
-  code-quality-and-build:
-    name: Lint & Build (Node.js 20)
+  build-and-typecheck:
+    name: Build & Typecheck (Node.js 22)
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 20 LTS
+      - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
 
       - name: Install dependencies cleanly
@@ -37,13 +34,10 @@ jobs:
       - name: Compile TypeScript to Production Bundle
         run: npm run build
 
-  # ==========================================
-  # Job 2: Verify Production Docker Multi-Stage Build
-  # ==========================================
-  docker-build-verification:
-    name: Verify Multi-Stage Docker Build
+  docker-build-check:
+    name: Verify Docker Build
     runs-on: ubuntu-latest
-    needs: code-quality-and-build
+    needs: build-and-typecheck
 
     steps:
       - name: Checkout repository
