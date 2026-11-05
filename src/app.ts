@@ -31,12 +31,39 @@ app.use(compression());
 // HTTP Request Logging with Winston
 app.use(morgan(env.NODE_ENV === "production" ? "combined" : "dev", { stream: morganStream }));
 
-// CORS Configuration
+// CORS Configuration supporting multiple domains, Vercel SPA, and credentials
+const corsOriginHandler = (
+  origin: string | undefined,
+  callback: (err: Error | null, allow?: boolean | string) => void
+) => {
+  // Allow mobile apps, curl, postman with no origin
+  if (!origin) return callback(null, true);
+
+  // If set to wildcard "*", reflect any origin dynamically with credentials
+  if (env.CORS_ORIGIN === "*") {
+    return callback(null, true);
+  }
+
+  const allowedOrigins = env.CORS_ORIGIN.split(",").map((s) => s.trim().replace(/\/$/, ""));
+  const normalizedOrigin = origin.replace(/\/$/, "");
+
+  if (
+    allowedOrigins.includes(normalizedOrigin) ||
+    allowedOrigins.includes("*") ||
+    normalizedOrigin.endsWith(".vercel.app")
+  ) {
+    return callback(null, true);
+  }
+
+  callback(null, false);
+};
+
 app.use(
   cors({
-    origin: env.CORS_ORIGIN === "*" ? "*" : env.CORS_ORIGIN.split(",").map((s) => s.trim()),
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    origin: corsOriginHandler,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
   })
 );
 
