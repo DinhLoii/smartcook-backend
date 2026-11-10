@@ -45,6 +45,12 @@
  *         title:
  *           type: string
  *           example: "Cơm Gà Teriyaki Áp Chảo"
+ *         youtubeVideoId:
+ *           type: string
+ *           nullable: true
+ *           pattern: '^[A-Za-z0-9_-]{11}$'
+ *           description: Mã video hướng dẫn trên YouTube. Gửi null khi cập nhật để gỡ video.
+ *           example: "LZ6rXyFRJjk"
  *         author:
  *           type: string
  *           example: "@smartcook.chef"

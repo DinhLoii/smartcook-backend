@@ -18,6 +18,17 @@ export interface MatchedRecipeItem {
   isFavorite?: boolean;
 }
 
+function getRecipeVideoId(recipe: IRecipe): string | null {
+  // Older seeded recipes predate this field. An explicit null clears the video.
+  if (recipe.youtubeVideoId !== undefined) return recipe.youtubeVideoId;
+  if (recipe.authorId) return null;
+
+  const seed = INITIAL_RECIPES.find(
+    (item) => item.title === recipe.title && item.author === recipe.author
+  );
+  return seed?.youtubeVideoId ?? null;
+}
+
 export class RecipeService {
   async getRecipes(
     filter: RecipeFilter = {},
@@ -50,6 +61,7 @@ export class RecipeService {
 
     const mappedRecipes = recipes.map((r) => ({
       ...r.toJSON(),
+      youtubeVideoId: getRecipeVideoId(r),
       isFavorite: favoriteSet.has(r._id.toString()),
     }));
 
@@ -111,6 +123,7 @@ export class RecipeService {
 
     return {
       ...recipeObj,
+      youtubeVideoId: getRecipeVideoId(recipe),
       ingredients: annotatedIngredients,
       fridgeMatchPercent,
       isFavorite,
