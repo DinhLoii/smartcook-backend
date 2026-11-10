@@ -1,6 +1,7 @@
 export const INITIAL_RECIPES = [
   {
     title: "Cơm Gà Teriyaki Áp Chảo",
+    youtubeVideoId: "LZ6rXyFRJjk",
     author: "@smartcook.chef",
     calories: 580,
     minutes: 30,
@@ -75,6 +76,7 @@ export const INITIAL_RECIPES = [
   },
   {
     title: "Bò Bít Tết Sốt Tiêu Măng Tây",
+    youtubeVideoId: "afrDkH5uZpk",
     author: "@chef.nguyen",
     calories: 720,
     minutes: 25,
@@ -131,6 +133,7 @@ export const INITIAL_RECIPES = [
   },
   {
     title: "Salad Cá Hồi Bơ Sốt Chanh Dây",
+    youtubeVideoId: "vbV1h68Mnms",
     author: "@eatclean.daily",
     calories: 420,
     minutes: 15,
@@ -186,6 +189,7 @@ export const INITIAL_RECIPES = [
   },
   {
     title: "Mỳ Ý Bò Bằm Sốt Cà Chua (Bolognese)",
+    youtubeVideoId: "yShBC-G-jrQ",
     author: "@pasta.lover",
     calories: 620,
     minutes: 20,
@@ -241,6 +245,7 @@ export const INITIAL_RECIPES = [
   },
   {
     title: "Đậu Hũ Nhồi Thịt Sốt Cà Chua",
+    youtubeVideoId: "Uo_rkeu5yyI",
     author: "@comnha.meo",
     calories: 450,
     minutes: 25,
@@ -296,6 +301,7 @@ export const INITIAL_RECIPES = [
   },
   {
     title: "Canh Chua Cá Hồi Miền Tây",
+    youtubeVideoId: "5QA6p1AW-Ac",
     author: "@bep.mientay",
     calories: 360,
     minutes: 25,

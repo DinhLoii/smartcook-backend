@@ -52,6 +52,7 @@ export interface IRecipe extends ISoftDeleteDocument {
   sub: string;
   tags: string[];
   image: string;
+  youtubeVideoId?: string | null;
   description: string;
   ingredients: IRecipeIngredient[];
   steps: IRecipeStep[];
@@ -253,6 +254,10 @@ const RecipeSchema = new Schema<IRecipe>(
     image: {
       type: String,
       required: [true, "Recipe image URL is required"],
+    },
+    youtubeVideoId: {
+      type: String,
+      match: /^[A-Za-z0-9_-]{11}$/,
     },
     description: {
       type: String,

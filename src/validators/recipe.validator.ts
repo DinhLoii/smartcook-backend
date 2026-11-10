@@ -1,5 +1,11 @@
 import Joi from "joi";
 
+const youtubeVideoIdSchema = Joi.string()
+  .trim()
+  .pattern(/^[A-Za-z0-9_-]{11}$/)
+  .allow(null)
+  .messages({ "string.pattern.base": "Mã video YouTube phải gồm 11 ký tự hợp lệ" });
+
 const recipeIngredientSchema = Joi.object({
   name: Joi.string().trim().required(),
   amount: Joi.string().trim().required(),
@@ -39,6 +45,7 @@ export const createRecipeSchema = Joi.object({
   sub: Joi.string().trim().allow("").optional(),
   tags: Joi.array().items(Joi.string().trim()).optional(),
   image: Joi.string().uri().required(),
+  youtubeVideoId: youtubeVideoIdSchema,
   description: Joi.string().trim().allow("").optional(),
   ingredients: Joi.array().items(recipeIngredientSchema).min(1).required(),
   steps: Joi.array().items(recipeStepSchema).min(1).required(),
@@ -60,6 +67,7 @@ export const updateRecipeSchema = Joi.object({
   sub: Joi.string().trim().allow("").optional(),
   tags: Joi.array().items(Joi.string().trim()).optional(),
   image: Joi.string().uri().optional(),
+  youtubeVideoId: youtubeVideoIdSchema,
   description: Joi.string().trim().allow("").optional(),
   ingredients: Joi.array().items(recipeIngredientSchema).min(1).optional(),
   steps: Joi.array().items(recipeStepSchema).min(1).optional(),
