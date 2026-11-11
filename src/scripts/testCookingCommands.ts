@@ -18,6 +18,7 @@ async function main() {
     ["quay lại bước trước vì thịt chưa chín", "PREV_STEP"],
     ["lui lai", "PREV_STEP"], ["quay lại bước trước, đừng cộng thêm", "NONE"],
     ["lùi 30 giây", "REDUCE_TIMER", 30], ["giảm một phút", "REDUCE_TIMER", 60],
+    ["trừ ba mươi giây", "REDUCE_TIMER", 30],
     ["bớt 1 phút 30 giây", "REDUCE_TIMER", 90], ["lui 30s", "REDUCE_TIMER", 30],
     ["lùi thời gian", "NONE"], ["lùi 30", "NONE"],
     ["thêm 2 phút", "EXTEND_TIMER", 120], ["tăng nửa phút", "EXTEND_TIMER", 30],
@@ -113,11 +114,11 @@ async function main() {
     assert.equal(firstStep.action, "NONE");
     assert.equal(parseCookingCommand("chưa xong"), null);
     assert.equal(parseCookingCommand("giảm lửa xuống"), null);
-    const advice = await aiService.cookingVoiceCopilot("test", { ...payload, userVoiceText: "thịt chưa chín" });
-    assert.equal(advice.action, "NONE", "Model advice must not silently add time");
+    await assert.rejects(aiService.cookingVoiceCopilot("test", { ...payload, userVoiceText: "thịt chưa chín" }),
+      { statusCode: 502 }, "Model advice must not silently add time");
     generation.mock.mockImplementation(async () => { throw new Error("offline"); });
-    const fallback = await aiService.cookingVoiceCopilot("test", { ...payload, userVoiceText: "chưa xong" });
-    assert.equal(fallback.action, "NONE", "Unfinished must not match finished or add time");
+    await assert.rejects(aiService.cookingVoiceCopilot("test", { ...payload, userVoiceText: "chưa xong" }),
+      { statusCode: 503 }, "Unfinished must not match finished or add time");
     console.log(`PASS: ${cases.length + stepCases.length} command/navigation cases, mobile action dispatch, numbered-step boundaries, model override and offline fallback.`);
   } finally {
     mock.restoreAll();
