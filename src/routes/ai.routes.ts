@@ -129,6 +129,8 @@ router.post("/assistant-chat", aiController.assistantChat);
  *       200: { description: Phản hồi ngắn trong data.speechReply cùng action và actionPayload nếu có }
  *       400: { description: Dữ liệu đầu vào thiếu hoặc vượt giới hạn }
  *       401: { description: Chưa đăng nhập }
+ *       502: { description: Nhà cung cấp trả về tư vấn không hợp lệ }
+ *       503: { description: Dịch vụ tư vấn tạm thời không khả dụng hoặc hết hạn mức }
  */
 /**
  * @route   POST /api/v1/ai/cooking-copilot
