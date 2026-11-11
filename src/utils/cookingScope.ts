@@ -60,10 +60,18 @@ export function normalizeCookingText(text: string): string {
     .replace(/đ/g, "d").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 }
 
+function mentionsIngredient(text: string, name: string): boolean {
+  return name.split(/[()]/).some((label) => {
+    const alias = normalizeCookingText(label);
+    return alias.length >= 2 && ` ${text} `.includes(` ${alias} `);
+  });
+}
+
 /** Step explanations are recipe lookups, not model advice or navigation commands. */
 export function getCookingStepReply(input: string, context: CookingScopeContext): string | null {
   const text = normalizeCookingText(input);
-  if (!/\bbuoc\b/.test(text) || /\b(tai sao|vi sao|co nen|neu|duoc khong|chua chin|bi chay|bi man)\b/.test(text)) return null;
+  const asksWhatToDo = /^(?:(?:bay )?gio |minh |tiep theo |roi |phai |can |nen )*lam gi(?: (?:tiep|tiep theo|bay gio|gio))?$/.test(text);
+  if ((!/\bbuoc\b/.test(text) && !asksWhatToDo) || /\b(tai sao|vi sao|co nen|neu|duoc khong|chua chin|bi chay|bi man)\b/.test(text)) return null;
   if (/(?:bước|buoc)\s*(?:(?:thứ|thu|số|so)\s*)?(?:-\d|\d+[.,]\d)/i.test(input)) return "Số bước không hợp lệ. Bạn hãy hỏi một bước trong danh sách trên màn hình nhé.";
   if (/\b(nguyen lieu|gia vi|dinh duong|calo|protein|tinh bot|chat beo)\b/.test(text)) return null;
   if (/\b(bao nhieu|may muong|may gam|may ml)\b/.test(text) && !/\b(phut|giay|thoi gian)\b/.test(text)) return null;
@@ -74,7 +82,7 @@ export function getCookingStepReply(input: string, context: CookingScopeContext)
   const currentIndex = steps.findIndex((step) => step.stepNumber === context.currentStep.stepNumber);
   const matches = [...text.matchAll(/\bbuoc\s+(?:(?:thu|so)\s+)?(dau tien|cuoi cung|cuoi|hien tai|nay|tiep theo|tiep|sau|truoc|-?\d+(?:[.,]\d+)?|(?:khong|mot|hai|ba|bon|tu|nam|lam|sau|bay|tam|chin|muoi|tram)(?:\s+(?:khong|mot|hai|ba|bon|tu|nam|lam|sau|bay|tam|chin|muoi|tram))*)\b/g)];
   if (matches.length > 1) return "Bạn muốn nghe nội dung bước nào? Hãy hỏi một bước cụ thể nhé.";
-  const reference = matches[0]?.[1];
+  const reference = matches[0]?.[1] ?? (asksWhatToDo && /\btiep(?: theo)?\b/.test(text) ? "tiep theo" : undefined);
   let target = context.currentStep.stepNumber;
   if (reference && !["nay", "hien tai"].includes(reference)) {
     if (["cuoi", "cuoi cung"].includes(reference)) target = steps.at(-1)?.stepNumber ?? -1;
@@ -124,7 +132,7 @@ export function getCookingScopeReply(input: string, context: CookingScopeContext
   const ingredientQuestion = /\b(bao nhieu|may|thieu|het|khong co|dung|cho|bo|thay|co can|duoc khong)\b/;
   if (ingredientQuestion.test(text) && context.recipeContext?.ingredients.some((item) => {
     const name = normalizeCookingText(item.name);
-    return name.length >= 3 && (` ${text} `.includes(` ${name} `)
+    return name.length >= 3 && (mentionsIngredient(text, item.name)
       || name.split(" ").some((word) => word.length >= 4 && ` ${text} `.includes(` ${word} `)));
   })) return null;
 
@@ -173,10 +181,14 @@ export function getCookingFactReply(input: string, context: CookingScopeContext 
     const duration = Math.max(0, Math.floor(seconds));
     return `Hẹn giờ còn ${Math.floor(duration / 60)} phút ${duration % 60} giây${context.stepTimer?.isRunning ? "." : ", đang dừng."}`;
   }
-  if (/\b(bao nhieu|may muong|may gam|may gram|may ml)\b/.test(text)
-    && !/\b(thay|gap doi|gap ba|khau phan|tang|giam|them|da dung|da cho|con lai|buoc nay|gia|tien|calo|calories|protein|dam|chat beo)\b/.test(text)) {
-    const matches = context.recipeContext?.ingredients.filter((item) =>
-      ` ${text} `.includes(` ${normalizeCookingText(item.name)} `)) ?? [];
+  const ingredients = context.recipeContext?.ingredients ?? [];
+  if (/\b(?:nguyen lieu|gia vi)\b/.test(text) && /\b(can nhung gi|gom nhung gi|gom gi|can gi|nhung nguyen lieu nao|danh sach|liet ke)\b/.test(text)
+    && !/\b(buoc|thay|them|bot|gap doi|gap ba)\b/.test(text) && ingredients.length) {
+    return "Nguyên liệu cho toàn bộ công thức: " + ingredients.map((item) => [item.name, item.amount].filter(Boolean).join(" ")).join("; ") + ".";
+  }
+  if (/\b(bao nhieu|may muong|may gam|may gram|may ml|dinh luong)\b/.test(text)
+    && !/\b(thay|gap doi|gap ba|khau phan|tang|giam|them|da dung|da cho|con lai|buoc|gia|tien|calo|calories|protein|dam|chat beo)\b/.test(text)) {
+    const matches = ingredients.filter((item) => mentionsIngredient(text, item.name));
     if (matches.length) return "Theo toàn bộ công thức: " + matches.map((item) => `${item.name}: ${item.amount || "công thức chưa ghi định lượng"}`).join(". ") + ".";
   }
   return null;
