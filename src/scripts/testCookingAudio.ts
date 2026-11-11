@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { mock } from "node:test";
-import express, { ErrorRequestHandler } from "express";
+import express from "express";
 import { AddressInfo } from "node:net";
 import { cookingAudioSchema } from "../validators/cooking-audio.validator";
 import { cookingCopilotSchema } from "../validators/cooking-copilot.validator";
 import { cookingAudioService } from "../services/cooking-audio.service";
 import { geminiClient } from "../config/gemini";
 import { validate } from "../middlewares/validate";
+import { errorHandler } from "../middlewares/errorHandler";
 import { aiController } from "../controllers/ai.controller";
 import aiRouter from "../routes/ai.routes";
 import { MealPlan } from "../models/MealPlan";
@@ -27,10 +28,7 @@ async function main() {
   app.post("/test", validate(cookingAudioSchema), aiController.transcribeCookingAudio);
   app.post("/test-copilot", validate(cookingCopilotSchema), aiController.cookingVoiceCopilot);
   app.use("/ai", aiRouter);
-  const errors: ErrorRequestHandler = (error, _req, res, _next) => {
-    res.status(error.statusCode || 500).json({ message: error.message });
-  };
-  app.use(errors);
+  app.use(errorHandler);
   const server = app.listen(0, "127.0.0.1");
   await new Promise<void>((resolve) => server.on("listening", resolve));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -58,7 +56,9 @@ async function main() {
     const generation = mock.method(geminiClient.models, "generateContent", async () => ({ text: '{"text":"Thêm hai phút"}' }));
     const response = await post("/test", body);
     assert.equal(response.status, 200);
-    assert.equal((await response.json()).data.text, "Thêm hai phút");
+    const transcription = await response.json();
+    assert.equal(transcription.success, true);
+    assert.equal(transcription.data.text, "Thêm hai phút");
     const parameters = generation.mock.calls[0].arguments[0] as unknown as { contents: { parts: { inlineData?: { mimeType: string } }[] }[] };
     assert.equal(parameters.contents[0].parts[0].inlineData?.mimeType, "audio/m4a");
     const config = (generation.mock.calls[0].arguments[0] as unknown as {
@@ -81,6 +81,29 @@ async function main() {
       const result = await failure.json();
       assert.ok(result.message.includes(message));
       assert.ok(!result.message.includes("private provider error"));
+    }
+    const adviceQuestion = {
+      recipeTitle: "Cơm gà", currentStep: { stepNumber: 2, title: "Pha sốt", description: "Khuấy đều." },
+      userVoiceText: "Nước sốt bị mặn thì xử lý sao?",
+    };
+    generation.mock.mockImplementation(async () => ({ text: JSON.stringify({
+      scope: "in_scope", action: "TROUBLESHOOT", speechReply: "Nếm lại sốt sau khi pha loãng từng ít một.",
+    }) }));
+    const advice = await post("/test-copilot", adviceQuestion);
+    assert.equal(advice.status, 200);
+    const adviceBody = await advice.json();
+    assert.equal(adviceBody.success, true);
+    assert.equal(adviceBody.data.action, "TROUBLESHOOT");
+    for (const status of [502, 503]) {
+      generation.mock.mockImplementation(async () => {
+        if (status === 503) throw Object.assign(new Error("provider busy"), { status: 429 });
+        return { text: "invalid JSON" };
+      });
+      const failure = await post("/test-copilot", { ...adviceQuestion, userVoiceText: "Nước sốt quá mặn thì xử lý sao?" });
+      assert.equal(failure.status, status);
+      const failureBody = await failure.json();
+      assert.equal(failureBody.success, false);
+      assert.equal(failureBody.data, undefined);
     }
     delete process.env.GEMINI_API_KEY;
     await assert.rejects(cookingAudioService.transcribe(body.audioBase64, body.mimeType), { statusCode: 503 });

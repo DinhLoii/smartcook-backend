@@ -1,7 +1,6 @@
-import { geminiClient, GEMINI_MODEL } from "../config/gemini";
+import { geminiClient, GEMINI_MODEL, GEMINI_SHORT_RESPONSE_OPTIONS } from "../config/gemini";
 import { AppError, BadRequestError } from "../utils/errors";
 import Joi from "joi";
-import { ThinkingLevel } from "@google/genai";
 
 const transcriptSchema = Joi.object({ text: Joi.string().allow("").max(2000).required() });
 
@@ -22,8 +21,7 @@ export const cookingAudioService = {
         ] }],
         config: { responseMimeType: "application/json", temperature: 0, maxOutputTokens: 1024,
           responseJsonSchema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
-          ...(/^gemini-3\.(?:1|5|6)-.*flash|^gemini-3-flash/.test(GEMINI_MODEL)
-            ? { thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } } : {}),
+          ...GEMINI_SHORT_RESPONSE_OPTIONS,
           httpOptions: { timeout: 15000, retryOptions: { attempts: 1 } } },
       });
       finishReason = response.candidates?.[0]?.finishReason;

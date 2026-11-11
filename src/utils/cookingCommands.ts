@@ -33,6 +33,7 @@ export function parseCookingCommand(input: string): CookingCommand | null {
   );
   // Asking what a step contains never authorizes navigation or changing its timer.
   if (/\bbuoc\b/.test(text) && /\b(thao tac|noi dung|gom|la gi|ra sao|lam the nao|lam nhu the nao|lam gi|lam nhung gi|can lam|bao lau|may phut|nhung gi)\b/.test(text)) return null;
+  if (/\b(lam gi|lam the nao|lam nhu the nao|lam sao|bao lau|bao nhieu)\b/.test(text)) return null;
   // Asking whether an action is appropriate is advice, not permission to execute it.
   if (/\b(co nen|co can|nen hay khong|neu|tai sao|vi sao)\b/.test(text)
     || (/\b(co|lieu)\b.*\b(khong|khong nhi)\b/.test(text)
@@ -72,11 +73,14 @@ export function parseCookingCommand(input: string): CookingCommand | null {
     }
   }
   if (hasTime && (decrease || increase)) {
-    const numbers: Record<string, number> = { mot: 1, hai: 2, ba: 3, bon: 4, nam: 5, sau: 6, bay: 7, tam: 8, chin: 9, muoi: 10, nua: 0.5 };
-    const pattern = /(-?\d+(?:[.,]\d+)?|mot|hai|ba|bon|nam|sau|bay|tam|chin|muoi|nua)\s*(phut|giay|gio|s\b|p\b)(\s+ruoi\b)?/g;
+    const timerNamed = /\b(hen gio|dong ho|thoi gian)\b/.test(text);
+    const timerRequest = /^(?:(?:ban )?co the |giup (?:minh|toi|em) |cho (?:minh|toi|em) |lam on |xin |hay )*(?:them|tang|cong|gia han|giam|tru|bot|rut ngan|lui)(?: (?:them|di|len|xuong|lai))*\s+(?:-?\d|nua\b|mot\b|hai\b|ba\b|bon\b|tu\b|nam\b|sau\b|bay\b|tam\b|chin\b|muoi\b)/.test(text);
+    if (!timerNamed && !timerRequest) return null;
+    const pattern = /(?:^|(?<=\s))(-?\d+(?:[.,]\d+)?|(?:mot|hai|ba|bon|tu|nam|lam|sau|bay|tam|chin|muoi|nua)(?: (?:mot|hai|ba|bon|tu|nam|lam|sau|bay|tam|chin|muoi))*)\s*(phut|giay|gio|s|p)\b(\s+ruoi\b)?/g;
     let seconds = 0;
     for (const match of text.matchAll(pattern)) {
-      const amount = numbers[match[1]] ?? Number(match[1].replace(",", "."));
+      const amount = match[1] === "nua" ? 0.5 : readStepNumber(match[1]);
+      if (amount === null || amount < 0) return unchanged("Bạn muốn chỉnh bao nhiêu phút hoặc giây? Hãy nói rõ, ví dụ giảm 30 giây.");
       const unit = match[2] === "gio" ? 3600 : ["phut", "p"].includes(match[2]) ? 60 : 1;
       seconds += (amount + (match[3] ? 0.5 : 0)) * unit;
     }

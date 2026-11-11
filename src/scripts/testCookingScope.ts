@@ -131,12 +131,10 @@ async function main() {
     for (const [index, output] of [
       "not JSON", '{"scope":"in_scope","speechReply":"Đã cộng giờ","action":"EXTEND_TIMER"}',
       JSON.stringify({ scope: "in_scope", speechReply: "Mình đã thêm 2 phút.", action: "NONE" }),
-      JSON.stringify({ scope: "in_scope", speechReply: "từ ".repeat(61), action: "NONE" }),
+      JSON.stringify({ scope: "in_scope", speechReply: "từ ".repeat(201), action: "NONE" }),
     ].entries()) {
       generation.mock.mockImplementation(async () => ({ text: output }));
-      const response = await aiService.cookingVoiceCopilot(`bad-output-${index}`, question);
-      assert.equal(response.action, "NONE");
-      assert.ok(response.speechReply.includes("chưa lấy được tư vấn"));
+      await assert.rejects(aiService.cookingVoiceCopilot(`bad-output-${index}`, question), { statusCode: 502 });
       checks++;
     }
     generation.mock.mockImplementation(async () => ({ text: JSON.stringify({ scope: "out_of_scope", speechReply: "nội dung lạc đề", action: "NONE" }) }));
@@ -144,11 +142,10 @@ async function main() {
     assert.equal(modelRefusal.speechReply, COOKING_SCOPE_REFUSAL);
     generation.mock.mockImplementation(async () => { throw new Error("unavailable"); });
     const beforeFailure = generation.mock.callCount();
-    await aiService.cookingVoiceCopilot("provider-failure", question);
+    await assert.rejects(aiService.cookingVoiceCopilot("provider-failure", question), { statusCode: 503 });
     assert.equal(generation.mock.callCount(), beforeFailure + 1, "Provider failure must not fan out to multiple models");
     generation.mock.mockImplementation(async () => { throw Object.assign(new Error("quota"), { status: 429 }); });
-    const quotaReply = await aiService.cookingVoiceCopilot("quota-failure", question);
-    assert.match(quotaReply.speechReply, /hết hạn mức/);
+    await assert.rejects(aiService.cookingVoiceCopilot("quota-failure", question), { statusCode: 503, message: /hết hạn mức/ });
     const beforeLocal = generation.mock.callCount();
     const repeatDuringQuota = await aiService.cookingVoiceCopilot("quota-failure", { ...question, userVoiceText: "Đọc lại" });
     assert.equal(repeatDuringQuota.action, "REPEAT_STEP");

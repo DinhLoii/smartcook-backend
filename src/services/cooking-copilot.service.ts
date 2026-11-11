@@ -1,9 +1,9 @@
-import { geminiClient, GEMINI_MODEL } from "../config/gemini";
+import { geminiClient, GEMINI_MODEL, GEMINI_SHORT_RESPONSE_OPTIONS } from "../config/gemini";
 import type { CookingCopilotRequest, CookingCopilotResponse } from "./ai.service";
 import { cookingAdviceJsonSchema, cookingAdviceSchema, cookingCopilotSchema } from "../validators/cooking-copilot.validator";
-import { BadRequestError } from "../utils/errors";
-import { resolveCookingCommand } from "../utils/cookingCommands";
-import { COOKING_CLARIFICATION, COOKING_SCOPE_REFUSAL, getCookingFactReply, getCookingScopeReply } from "../utils/cookingScope";
+import { AppError, BadRequestError } from "../utils/errors";
+import { readStepNumber, resolveCookingCommand } from "../utils/cookingCommands";
+import { COOKING_CLARIFICATION, COOKING_SCOPE_REFUSAL, getCookingFactReply, getCookingScopeReply, normalizeCookingText } from "../utils/cookingScope";
 
 const SYSTEM_INSTRUCTION = `Bạn là trợ lý cho DUY NHẤT món đang nấu trong dữ liệu JSON.
 Chỉ giải đáp nguyên liệu, định lượng, dinh dưỡng, thay thế phù hợp, thao tác, độ chín, sự cố và bước nấu của món đó.
@@ -20,22 +20,15 @@ Không tự chuyển bước hoặc chỉnh hẹn giờ. Không nói đã làm c
 Chỉ trả JSON {scope: in_scope|out_of_scope|needs_clarification, speechReply: string, action: NONE|TROUBLESHOOT, suggestedQuickReplies: string[]}.
 Trả lời tiếng Việt, tối đa 60 từ, không Markdown, tối đa 3 gợi ý ngắn. Ưu tiên trả lời thẳng câu hỏi.`;
 
-const unavailable: CookingCopilotResponse = {
-  action: "NONE",
-  speechReply: "Mình chưa lấy được tư vấn đáng tin cậy. Bạn hãy kiểm tra công thức trên màn hình hoặc thử hỏi lại nhé.",
-  suggestedQuickReplies: ["Đọc lại", "Đang ở bước nào?"],
-};
 const cache = new Map<string, { expires: number; response: CookingCopilotResponse }>();
 const inFlight = new Map<string, Promise<CookingCopilotResponse>>();
 const local = (speechReply: string): CookingCopilotResponse => ({ action: "NONE", speechReply, suggestedQuickReplies: [] });
-function fallback(reason: string, status?: number): CookingCopilotResponse {
+function adviceError(reason: string, status?: number): AppError {
   // Deliberately omit credentials, raw provider errors, transcripts and recipe content.
   console.warn("[CookingCopilot] Advice unavailable", { reason, model: GEMINI_MODEL, status });
-  if (status === 429) return {
-    ...unavailable,
-    speechReply: "Dịch vụ AI đang hết hạn mức nên chưa trả lời được câu hỏi này. Bạn vẫn có thể dùng đọc hướng dẫn, chuyển bước và hẹn giờ. Hãy thử hỏi AI lại khi hạn mức được khôi phục.",
-  };
-  return unavailable;
+  if (status === 429) return new AppError("Dịch vụ tư vấn AI đang hết hạn mức. Bạn vẫn có thể hỏi nội dung công thức, chuyển bước hoặc chỉnh hẹn giờ.", 503);
+  if (reason === "provider_error") return new AppError("Dịch vụ tư vấn AI tạm thời chưa kết nối được. Bạn có thể thử lại hoặc hỏi nội dung một bước trong công thức.", 503);
+  return new AppError("Dịch vụ tư vấn AI trả về câu trả lời chưa hợp lệ. Hãy thử hỏi lại.", 502);
 }
 
 export const cookingCopilotService = {
@@ -51,7 +44,9 @@ export const cookingCopilotService = {
     const fact = getCookingFactReply(payload.userVoiceText, payload);
     if (fact) return local(fact);
 
-    const referencedStep = payload.userVoiceText.match(/(?:bước|buoc)\s*(\d+)/i)?.[1];
+    const stepReference = normalizeCookingText(payload.userVoiceText)
+      .match(/\bbuoc (?:(?:thu|so) )?(\d+|(?:(?:mot|hai|ba|bon|tu|nam|lam|sau|bay|tam|chin|muoi|tram)\b ?)+)/)?.[1];
+    const referencedStep = stepReference ? readStepNumber(stepReference.trim()) : null;
     const context = {
       recipeTitle: payload.recipeTitle,
       currentStep: { ...payload.currentStep, description: payload.currentStep.description.slice(0, 1000) },
@@ -61,7 +56,7 @@ export const cookingCopilotService = {
       ingredients: payload.recipeContext?.ingredients.map((item) => ({ name: item.name.slice(0, 80), amount: item.amount.slice(0, 60) })),
       relatedSteps: payload.recipeContext?.steps.filter((step) =>
         step.stepNumber !== payload.currentStep.stepNumber && (Math.abs(step.stepNumber - payload.currentStep.stepNumber) <= 1
-          || step.stepNumber === Number(referencedStep))).slice(0, 3)
+          || step.stepNumber === referencedStep))
         .map((step) => ({ ...step, description: step.description.slice(0, 600) })),
       conversationHistory: payload.conversationHistory?.slice(-4).map((turn) => ({ ...turn, text: turn.text.slice(0, 250) })),
       question: payload.userVoiceText,
@@ -83,22 +78,22 @@ export const cookingCopilotService = {
             systemInstruction: SYSTEM_INSTRUCTION,
             responseMimeType: "application/json", temperature: 0.2, maxOutputTokens: 512,
             responseJsonSchema: cookingAdviceJsonSchema,
+            ...GEMINI_SHORT_RESPONSE_OPTIONS,
             // Gemini rejects deadlines below 10 seconds before generating any advice.
             httpOptions: { timeout: 15000, retryOptions: { attempts: 1 } },
           },
         });
         const parsed = cookingAdviceSchema.validate(JSON.parse(response.text || "{}"), { stripUnknown: true });
-        if (parsed.error) return fallback("invalid_response_schema");
+        if (parsed.error) throw adviceError("invalid_response_schema");
         const advice = parsed.value as {
           scope: string; speechReply: string; action: "NONE" | "TROUBLESHOOT"; suggestedQuickReplies: string[];
         };
         if (advice.scope === "out_of_scope") return local(COOKING_SCOPE_REFUSAL);
         if (advice.scope === "needs_clarification") return local(advice.speechReply || COOKING_CLARIFICATION);
-        if (advice.speechReply.split(/\s+/).length > 60) return fallback("response_too_long");
         // Describing ingredients already added is valid cooking advice, not a timer action.
         if (/(?:^|[.!?]\s*)(?:mình|tôi|trợ lý)\s+(?:đã|vừa)\s+(?:cộng|thêm|giảm|trừ|chỉnh|tăng|chuyển|quay lại|tắt|bật)/i.test(advice.speechReply)
           || /(?:^|[.!?]\s*)(?:đã|vừa)\s+(?:(?:cộng|thêm|giảm|trừ|chỉnh|tăng).{0,35}(?:giây|phút|hẹn giờ|đồng hồ)|chuyển bước|chuyển sang bước|quay lại bước)/i.test(advice.speechReply)) {
-          return fallback("unsupported_action_claim");
+          throw adviceError("unsupported_action_claim");
         }
         const result: CookingCopilotResponse = {
           action: advice.action, speechReply: advice.speechReply, suggestedQuickReplies: advice.suggestedQuickReplies,
@@ -108,8 +103,9 @@ export const cookingCopilotService = {
         cache.set(key, { expires: Date.now() + 90_000, response: result });
         return result;
       } catch (error: unknown) {
+        if (error instanceof AppError) throw error;
         const status = typeof error === "object" && error !== null && "status" in error && typeof error.status === "number" ? error.status : undefined;
-        return fallback(error instanceof SyntaxError ? "invalid_json" : "provider_error", status);
+        throw adviceError(error instanceof SyntaxError ? "invalid_json" : "provider_error", status);
       }
     })();
     inFlight.set(key, request);
